@@ -1,4 +1,4 @@
-// Package hdc implements lcd driver for popular Hitachi HD44780 controller
+// Package hdc implements lcd.Driver for popular Hitachi HD44780 controller
 //
 // Only 4-bit mode is supported. There is default controller lines to bits
 // mapping used by this package:
@@ -131,7 +131,7 @@ const (
 )
 
 func (d *Driver) SetFunction(f Function) error {
-	return d.writeCmd(byte(0x20 | f&0x06))
+	return d.writeCmd(byte(0x20 | f&0x0f))
 }
 
 func (d *Driver) SetCGRAMAddr(addr int) error {
@@ -175,12 +175,11 @@ func (d *Driver) Init() error {
 	}
 	// Some controller models may require to use SetFunction before any other
 	// instuction.
-	/*f := Font5x8
+	f := Font5x8
 	if d.rows != 1 {
 		f |= TwoLines
 	}
-	err = d.SetFunction(f)*/
-	//_, err = d.w.Write([]byte{2, 4})
+		err = d.SetFunction(f)
 	if err != nil {
 		return err
 	}

@@ -78,7 +78,7 @@ func (o *BitbangOut) Write(data []byte) (int, error) {
 		if _, err := o.w.Write(buf[1:]); err != nil {
 			return n - 1, err
 		}
-		time.Sleep(10* time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	return len(data), nil
 }

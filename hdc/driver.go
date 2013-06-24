@@ -117,7 +117,7 @@ const (
 	ShiftRight  Shift = 1 << 2
 )
 
-func (d *Driver) Shift(f Shift) error {
+func (d *Driver) SetShift(f Shift) error {
 	return d.writeCmd(byte(0x10 | f&0xc))
 }
 
@@ -126,7 +126,7 @@ type Function byte
 const (
 	OneLine  Function = 0
 	TwoLines Function = 1 << 3
-	Font5x7  Function = 0
+	Font5x8  Function = 0
 	Font5x10 Function = 1 << 2
 )
 
@@ -163,11 +163,11 @@ var init4bit = []byte{
 // are lost. After Init controller should be in the following state:
 // - 4-bit mode,
 // - one line display if rows == 1, two line display otherwise,
-// - 5x7 font,
+// - 5x8 font,
 // - display off, cursor off, blink off,
 // - increment mode,
 // - display cleared.
-func (d *Driver) Reset() error {
+func (d *Driver) Init() error {
 	d.n = 0
 	_, err := d.w.Write(init4bit)
 	if err != nil {
@@ -175,7 +175,12 @@ func (d *Driver) Reset() error {
 	}
 	// Some controller models may require to use SetFunction before any other
 	// instuction.
-	err = d.SetFunction(OneLine | Font5x7)
+	/*f := Font5x8
+	if d.rows != 1 {
+		f |= TwoLines
+	}
+	err = d.SetFunction(f)*/
+	//_, err = d.w.Write([]byte{2, 4})
 	if err != nil {
 		return err
 	}
@@ -183,11 +188,11 @@ func (d *Driver) Reset() error {
 	if err != nil {
 		return err
 	}
-	err d.SetEntryMode(IncrMode)
+	err = d.SetEntryMode(IncrMode)
 	if err != nil {
 		return err
 	}
-	err = d.ClearDisplay()
+	return d.ClearDisplay()
 }
 
 // Writes data byte at current CG RAM or DD RAM address (RS bit in both produced

@@ -159,19 +159,22 @@ var init4bit = []byte{
 	2,
 }
 
-// Reset initializes the driver and the display. All previously buffered data are
-// lost. After Init controller is in its default power-on state with 4-bit mode
-// enabled. Driver's internal buffer is empty.
+// Init initializes the driver and the display. All previously buffered data
+// are lost. After Init controller should be in the following state:
+// - 4-bit mode,
+// - one line display if rows == 1, two line display otherwise,
+// - 5x7 font,
+// - display off, cursor off, blink off,
+// - increment mode,
+// - display cleared.
 func (d *Driver) Reset() error {
 	d.n = 0
 	_, err := d.w.Write(init4bit)
 	if err != nil {
 		return err
 	}
-	err = d.ClearDisplay()
-	if err != nil {
-		return err
-	}
+	// Some controller models may require to use SetFunction before any other
+	// instuction.
 	err = d.SetFunction(OneLine | Font5x7)
 	if err != nil {
 		return err
@@ -180,7 +183,11 @@ func (d *Driver) Reset() error {
 	if err != nil {
 		return err
 	}
-	return d.SetEntryMode(IncrMode)
+	err d.SetEntryMode(IncrMode)
+	if err != nil {
+		return err
+	}
+	err = d.ClearDisplay()
 }
 
 // Writes data byte at current CG RAM or DD RAM address (RS bit in both produced

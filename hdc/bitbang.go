@@ -24,6 +24,9 @@ type Bitbang struct {
 	e, rw, aux byte
 	a          byte
 	buf        [6]byte
+	//buf [80 * 2 * 2]byte
+
+	t time.Time
 }
 
 // NewBitbang re
@@ -42,52 +45,116 @@ func (o *Bitbang) SetMapping(e, rw, aux byte) {
 	o.aux = aux
 }
 
+func (o *
+
+func (o *Bitbang) wait() {
+	if !o.t.IsZero() {
+		d := o.t.Sub(time.Now())
+		if d > 0 {
+			time.Sleep(d)
+		}
+	}
+}
+
+func (o *Bitbang) setWait(d time.Duration) {
+	o.t = time.Now().Add(d)
+}
+
 func (o *Bitbang) Write(data []byte) (int, error) {
-	if len(data) == 1 {
-		// One nibble, initialisation
+	if len(data) == 0 {
+		return 0, nil
 	}
 
+	if len(data) == 1 {
+		// One nibble: initialisation command
+		o.wait()
+		b := data[0] | o.a
+		o.buf[0] = b
+		o.buf[1] = b | o.e
+		o.buf[2] = b
+		_, err := o.w.Write(o.buf[:3])
+		if err != nil {
+			return 0, err
+		}
+		o.setWait(5 * time.Millisecond)
+		return 1, nil
+	}
 
-	n := 0
-	blen := len(o.buf) / 3
-	for len(data) != 0 {
-		l := len(data)
-		if l > blen {
-			l = blen
-		}
-		k := 0
-		for _, b := range data[:l] {
-			b |= o.a
-			o.buf[k] = b
-			o.buf[k+1] = b | o.e
-			o.buf[k+2] = b
-			k += 3
-		}
-		k, err := o.w.Write(o.buf[:k])
-		n += k / 4
+	if len(data)%2 != 0 {
+		panic("data length must be 1 or an even number")
+	}
+
+	for n := 0; n < len(data); n += 2 {
+		// Multiple bytes - regural commands
+		o.wait()
+		b0 := data[n]
+		b1 := data[n+1]
+		b := b0<<4 | b1&0x0f
+		b0 |= o.a
+		b1 |= o.a
+		o.buf[0] = b0
+		o.buf[1] = b0 | o.e
+		o.buf[2] = b0
+		o.buf[3] = b1
+		o.buf[4] = b1 | o.e
+		o.buf[5] = b1
+		_, err := o.w.Write(o.buf[:])
 		if err != nil {
 			return n, err
 		}
-		data = data[l:]
-	}
-	time.Sleep(100 * time.Millisecond)
-	return n, nil
-}
-
-/*
-func (o *Bitbang) WriteC(data []byte) (int, error) {
-	buf := make([]byte, 4)
-	for n := 0; n < len(data); n += 2 {
-		b := data[n]
-		buf[0] = b | o.e
-		buf[1] = b
-		b = data[n+1]
-		buf[2] = b | o.e
-		buf[3] = b
-		if _, err := o.w.Write(buf); err != nil {
-			return n - 1, err
+		if b < 4 {
+			// "Clear display" or "Return home"
+			o.setWait(16 * time.Millisecond)
+		} else {
+			// Other command
+			o.setWait(40 * time.Microsecond)
 		}
-		time.Sleep(time.Millisecond)
 	}
 	return len(data), nil
+}
+
+/*func (o *Bitbang) Write(data []byte) (int, error) {
+	if len(data) == 0 {
+		return 0, nil
+	}
+
+	if len(data) == 1 {
+		// One nibble: initialisation command
+		b := data[0] | o.a
+		o.buf[0] = b | o.e
+		o.buf[1] = b
+		_, err := o.w.Write(o.buf[:2])
+		if err != nil {
+			return 0, err
+		}
+		return 1, nil
+	}
+
+	if len(data)%2 != 0 {
+		panic("data length must be 1 or an even number")
+	}
+
+	l := len(data)
+	for len(data) > 0 {
+		n := len(o.buf) / 2
+		if n > len(data) {
+			n = len(data)
+		}
+		k := 0
+		for i := 0; i < n; i += 2 {
+			b0 := data[i] | o.a
+			b1 := data[i+1] | o.a
+			o.buf[k] = b0 | o.e
+			o.buf[k+1] = b0
+			o.buf[k+2] = b1 | o.e
+			o.buf[k+3] = b1
+			k += 4
+		}
+		k, err := o.w.Write(o.buf[:k])
+		if err != nil {
+			return l - len(data) + k/2, err
+		}
+		data = data[n:]
+	}
+	return l, nil
 }*/

@@ -21,6 +21,11 @@ import (
 // mode. It handles only logical part of this communication so it uses only
 // D4-D7 and RS bits and writes commands/data using some io.Writer which
 // represents a logical communication channel.
+//
+// All commands are written to the provided io.Writer as two bytes (multiple
+// commands can be written using one Write call) with exception of
+// initialisation commands that are always written as one byte (only one
+// initialisation command is written at a time).
 type Device struct {
 	w          io.Writer
 	rows, cols int
@@ -45,8 +50,8 @@ func NewDevice(w io.Writer, rows, cols int) *Device {
 	}
 }
 
-// SetRS allows to change bit used for RS signal.
-func (d *Device) SetRS(rs byte) {
+// MapRS allows to change bit used for RS signal.
+func (d *Device) MapRS(rs byte) {
 	d.rs = rs
 }
 
@@ -187,6 +192,11 @@ func (d *Device) Init() error {
 
 // Write writes buf starting from current CG RAM or DD RAM address.
 func (d *Device) Write(data []byte) (int, error) {
+	for _, b := range data {
+		d.WriteByte(b)
+	}
+	return len(data), nil
+
 	n := 0
 	blen := len(d.buf) / 2
 	for len(data) != 0 {

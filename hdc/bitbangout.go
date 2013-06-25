@@ -25,7 +25,6 @@ func NewBitbangOut(w io.Writer) *BitbangOut {
 		e:   1 << 4,
 		rw:  1 << 5,
 		aux: 1 << 7,
-		buf: make([]byte, defaultBufLen*4),
 	}
 }
 

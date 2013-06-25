@@ -1,4 +1,4 @@
-// Package hdc implements lcd.Driver for popular Hitachi HD44780 controller
+// Package hdc implements lcd.Device for popular Hitachi HD44780 controller
 //
 // Only 4-bit mode is supported. There is default controller lines to bits
 // mapping used by this package:
@@ -17,67 +17,57 @@ import (
 	"io"
 )
 
-const defaultBufLen = 2 * 84
-
-// Driver allows to send commands and data to HD44780 LCD controller in 4-bit
+// Device allows to send commands and data to HD44780 LCD controller in 4-bit
 // mode. It handles only logical part of this communication so it uses only
 // D4-D7 and RS bits and writes commands/data using some io.Writer which
-// represents a logical communication channel. It contains internal buffer for
-// commands/data (every byte in buffer can contain 4-bit command/data nibble +
-// RS bit).
-type Driver struct {
+// represents a logical communication channel.
+type Device struct {
 	w          io.Writer
 	rows, cols int
 	rs         byte
-	buf        []byte
-	n          int
+	buf        [80 * 2]byte
 }
 
-// New creates Device with rows x cols display using w for communication.
-// rows can be 1, 2 or 4, cols can be from 1 to 20 (New panics if you use other
-// walues). By default backlight is off.
-func NewDriver(w io.Writer, rows, cols int) *Driver {
+// NewDevice creates Device with rows x cols display using w for communication.
+// rows can be 1, 2 or 4, cols can be from 1 to 20 (NewDevice panics if you use
+// other walues).
+func NewDevice(w io.Writer, rows, cols int) *Device {
 	if rows != 1 && rows != 2 && rows != 4 {
 		panic("bad number of rows")
 	}
 	if cols < 1 || cols > 40 {
 		panic("bad number of cols")
 	}
-	return &Driver{
+	return &Device{
 		w:    w,
 		rows: rows, cols: cols,
-		rs:  1 << 6,
-		buf: make([]byte, defaultBufLen),
+		rs: 1 << 6,
 	}
 }
 
 // SetRS allows to change bit used for RS signal.
-func (d *Driver) SetRS(rs byte) {
+func (d *Device) SetRS(rs byte) {
 	d.rs = rs
 }
 
-func (d *Driver) Flush() error {
-	_, err := d.w.Write(d.buf[:d.n])
-	d.n = 0
+func (d *Device) writeNibble(b byte) error {
+	d.buf[0] = b
+	_, err := d.w.Write(d.buf[:1])
 	return err
 }
 
-func (d *Driver) writeCmd(b byte) error {
-	if d.n == len(d.buf) {
-		if err := d.Flush(); err != nil {
-			return err
-		}
-	}
-	d.buf[d.n] = (b >> 4)
-	d.buf[d.n+1] = (b & 0x0f)
-	d.n += 2
-	return nil
+func (d *Device) writeCmd(b byte) error {
+	d.buf[0] = b >> 4
+	d.buf[1] = b & 0x0f
+	_, err := d.w.Write(d.buf[:2])
+	return err
 }
-func (d *Driver) ClearDisplay() error {
+
+func (d *Device) ClearDisplay() error {
 	return d.writeCmd(0x01)
 }
 
-func (d *Driver) ReturnHome() error {
+func (d *Device) ReturnHome() error {
 	return d.writeCmd(0x02)
 }
 
@@ -89,7 +79,7 @@ const (
 	ShiftMode EntryMode = 1
 )
 
-func (d *Driver) SetEntryMode(f EntryMode) error {
+func (d *Device) SetEntryMode(f EntryMode) error {
 	return d.writeCmd(byte(0x04 | f&0x03))
 }
 
@@ -104,7 +94,7 @@ const (
 	BlinkOn    Display = 1
 )
 
-func (d *Driver) SetDisplay(f Display) error {
+func (d *Device) SetDisplay(f Display) error {
 	return d.writeCmd(byte(0x08 | f&7))
 }
 
@@ -117,7 +107,7 @@ const (
 	ShiftRight  Shift = 1 << 2
 )
 
-func (d *Driver) SetShift(f Shift) error {
+func (d *Device) SetShift(f Shift) error {
 	return d.writeCmd(byte(0x10 | f&0xc))
 }
 
@@ -130,15 +120,15 @@ const (
 	Font5x10 Function = 1 << 2
 )
 
-func (d *Driver) SetFunction(f Function) error {
+func (d *Device) SetFunction(f Function) error {
 	return d.writeCmd(byte(0x20 | f&0x0f))
 }
 
-func (d *Driver) SetCGRAMAddr(addr int) error {
+func (d *Device) SetCGRAMAddr(addr int) error {
 	return d.writeCmd(0x40 | byte(addr)&0x3f)
 }
 
-func (d *Driver) SetDDRAMAddr(addr int) error {
+func (d *Device) SetDDRAMAddr(addr int) error {
 	return d.writeCmd(0x80 | byte(addr)&0x7f)
 }
 
@@ -167,11 +157,12 @@ var init4bit = []byte{
 // - display off, cursor off, blink off,
 // - increment mode,
 // - display cleared.
-func (d *Driver) Init() error {
-	d.n = 0
-	_, err := d.w.Write(init4bit)
-	if err != nil {
-		return err
+func (d *Device) Init() error {
+	var err error
+	for _, b := range init4bit {
+		if err = d.writeNibble(b); err != nil {
+			return err
+		}
 	}
 	// Some controller models may require to use SetFunction before any other
 	// instuction.
@@ -179,7 +170,7 @@ func (d *Driver) Init() error {
 	if d.rows != 1 {
 		f |= TwoLines
 	}
-		err = d.SetFunction(f)
+	err = d.SetFunction(f)
 	if err != nil {
 		return err
 	}
@@ -194,16 +185,35 @@ func (d *Driver) Init() error {
 	return d.ClearDisplay()
 }
 
-// Writes data byte at current CG RAM or DD RAM address (RS bit in both produced
-// nibbles are set to 1).
-func (d *Driver) WriteByte(b byte) error {
-	if d.n == len(d.buf) {
-		if err := d.Flush(); err != nil {
-			return err
+// Write writes buf starting from current CG RAM or DD RAM address.
+func (d *Device) Write(data []byte) (int, error) {
+	n := 0
+	blen := len(d.buf) / 2
+	for len(data) != 0 {
+		l := len(data)
+		if l > blen {
+			l = blen
 		}
+		k := 0
+		for _, b := range data[:l] {
+			d.buf[k] = d.rs | b>>4
+			d.buf[k+1] = d.rs | b&0x0f
+			k += 2
+		}
+		k, err := d.w.Write(d.buf[:k])
+		n += k / 2
+		if err != nil {
+			return n, err
+		}
+		data = data[l:]
 	}
-	d.buf[d.n] = d.rs | (b >> 4)
-	d.buf[d.n+1] = d.rs | (b & 0x0f)
-	d.n += 2
-	return nil
+	return n, nil
+}
+
+// Writes byte at current CG RAM or DD RAM address.
+func (d *Device) WriteByte(b byte) error {
+	d.buf[0] = d.rs | b>>4
+	d.buf[1] = d.rs | b&0x0f
+	_, err := d.w.Write(d.buf[:2])
+	return err
 }

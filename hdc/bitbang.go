@@ -2,7 +2,7 @@ package hdc
 
 import (
 	"io"
-	"log"
+	"time"
 )
 
 // Bitbang handles communication with HD44780 using some controller that
@@ -15,7 +15,7 @@ type Bitbang struct {
 	w          io.Writer
 	e, rw, aux byte
 	a          byte
-	buf        []byte
+	buf        [80 * 2 * 2]byte
 }
 
 func NewBitbang(w io.Writer) *Bitbang {
@@ -24,7 +24,6 @@ func NewBitbang(w io.Writer) *Bitbang {
 		e:   1 << 4,
 		rw:  1 << 5,
 		aux: 1 << 7,
-		buf: make([]byte, defaultBufLen*3),
 	}
 }
 
@@ -35,14 +34,10 @@ func (o *Bitbang) SetMapping(e, rw, aux byte) {
 }
 
 func (o *Bitbang) Write(data []byte) (int, error) {
-	log.Println("Bitbang.Write", data)
 	n := 0
-	blen := len(o.buf) / 3
-	for {
+	blen := len(o.buf) / 2
+	for len(data) != 0 {
 		l := len(data)
-		if l == 0 {
-			return n, nil
-		}
 		if l > blen {
 			l = blen
 		}
@@ -51,16 +46,17 @@ func (o *Bitbang) Write(data []byte) (int, error) {
 			b |= o.a
 			o.buf[k] = b
 			o.buf[k+1] = b | o.e
-			o.buf[k+2] = b
-			k += 3
+			k += 2
 		}
 		k, err := o.w.Write(o.buf[:k])
-		n += k / 3
+		n += k / 2
 		if err != nil {
 			return n, err
 		}
 		data = data[l:]
 	}
+	time.Sleep(5 * time.Millisecond)
+	return n, nil
 }
 
 /*

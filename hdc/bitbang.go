@@ -45,7 +45,27 @@ func (o *Bitbang) SetMapping(e, rw, aux byte) {
 	o.aux = aux
 }
 
-func (o *
+func (o *Bitbang) SetRW(b bool) error {
+	if b {
+		o.a |= o.rw
+	} else {
+		o.a &^= o.rw
+	}
+	o.buf[0] = o.a
+	_, err := o.w.Write(o.buf[:1])
+	return err
+}
+
+func (o *Bitbang) SetAUX(b bool) error {
+	if b {
+		o.a |= o.aux
+	} else {
+		o.a &^= o.aux
+	}
+	o.buf[0] = o.a
+	_, err := o.w.Write(o.buf[:1])
+	return err
+}
 
 func (o *Bitbang) wait() {
 	if !o.t.IsZero() {
@@ -85,7 +105,7 @@ func (o *Bitbang) Write(data []byte) (int, error) {
 	}
 
 	for n := 0; n < len(data); n += 2 {
-		// Multiple bytes - regural commands
+		// Multiple nibbles: regural commands
 		o.wait()
 		b0 := data[n]
 		b1 := data[n+1]

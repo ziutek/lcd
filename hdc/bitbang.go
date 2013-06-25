@@ -9,15 +9,22 @@ import (
 // implements clocked output of received data onto the D4-D7, E, RS pins (eg.
 // FTDI USB chips in bitbang mode).
 //
-// Additionaly it provides methods to controll AUX and R/W bits (if you want to
+// It writes 3 bytes for one nibble to the provided io.Writer:
+// - first:  with E bit unset, need >= 140 ns
+// - second: with E bit set,   need >= 450 ns
+// - thrid:  with E bit unset, need >= 10 ns
+// Full E cycle need >= 1000 ns.
+//
+// Additionaly Bitbang provides methods to controll AUX and R/W bits (if you want to
 // use R/W bit as second AUX, the real R/W pin should be connected to the VSS).
 type Bitbang struct {
 	w          io.Writer
 	e, rw, aux byte
 	a          byte
-	buf        [80 * 2 * 2]byte
+	buf        [80 * 2 * 3]byte
 }
 
+// NewBitbang re
 func NewBitbang(w io.Writer) *Bitbang {
 	return &Bitbang{
 		w:   w,
@@ -35,7 +42,7 @@ func (o *Bitbang) SetMapping(e, rw, aux byte) {
 
 func (o *Bitbang) Write(data []byte) (int, error) {
 	n := 0
-	blen := len(o.buf) / 2
+	blen := len(o.buf) / 3
 	for len(data) != 0 {
 		l := len(data)
 		if l > blen {
@@ -46,16 +53,17 @@ func (o *Bitbang) Write(data []byte) (int, error) {
 			b |= o.a
 			o.buf[k] = b
 			o.buf[k+1] = b | o.e
-			k += 2
+			o.buf[k+2] = b
+			k += 3
 		}
 		k, err := o.w.Write(o.buf[:k])
-		n += k / 2
+		n += k / 3
 		if err != nil {
 			return n, err
 		}
 		data = data[l:]
 	}
-	time.Sleep(5 * time.Millisecond)
+	time.Sleep(16 * time.Millisecond)
 	return n, nil
 }
 

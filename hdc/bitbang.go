@@ -14,7 +14,18 @@ import (
 // - second: with E bit set,   need >= 230 ns
 // - thrid:  with E bit unset, need >= 10 ns
 // Full E cycle need >= 500 ns.
-// Baudrate that satisfy all this time constrains: 1 B / 230 ns = 4347826 B/s
+// 
+// Bitbang can work in two modes:
+//
+// 1. Strict mode
+//
+// After writing two nibbles (one command, 6 bytes) it waits before n
+//it writes
+// waitTicks zero bytes to wait for command to be executed. If previous command
+// was "Clear screen" or "Return home" (they has long execution time) and the
+// sufficint time hasn't elapsed,  Bitbang waits enough time before writting
+// next commands. You should avoid "Clear screen" or "Return home" if possible,
+// because they break byte flow 
 //
 // Additionaly Bitbang provides methods to controll AUX and R/W bits (if you
 // want to use R/W bit as second AUX, the real R/W pin should be connected to
@@ -23,20 +34,31 @@ type Bitbang struct {
 	w          io.Writer
 	e, rw, aux byte
 	a          byte
-	buf        [6]byte
-	//buf [80 * 2 * 2]byte
+
+	bpc int
+	buf []byte
 
 	t time.Time
 }
 
 // NewBitbang re
-func NewBitbang(w io.Writer) *Bitbang {
+func NewBitbang(w io.Writer, waitTicks int) *Bitbang {
+	if waitTicks < 0 {
+		panic("waitTicks < 0")
+	}
+	bpc := 6 + waitTicks
 	return &Bitbang{
 		w:   w,
 		e:   1 << 4,
 		rw:  1 << 5,
 		aux: 1 << 7,
+		bpc: bpc,
+		buf: make([]byte, 80*bpc),
 	}
+}
+
+func (o *Bitbang) SetWriter(w io.Writer) {
+	o.w = w
 }
 
 func (o *Bitbang) SetMapping(e, rw, aux byte) {
@@ -73,6 +95,7 @@ func (o *Bitbang) wait() {
 		if d > 0 {
 			time.Sleep(d)
 		}
+		o.t = time.Time{}
 	}
 }
 
@@ -80,7 +103,7 @@ func (o *Bitbang) setWait(d time.Duration) {
 	o.t = time.Now().Add(d)
 }
 
-func (o *Bitbang) Write(data []byte) (int, error) {
+func (o *Bitbang) write1(data []byte) (int, error) {
 	if len(data) == 0 {
 		return 0, nil
 	}
@@ -127,26 +150,29 @@ func (o *Bitbang) Write(data []byte) (int, error) {
 			o.setWait(16 * time.Millisecond)
 		} else {
 			// Other command
-			o.setWait(40 * time.Microsecond)
+			o.setWait(0 * time.Microsecond)
 		}
 	}
 	return len(data), nil
 }
 
-/*func (o *Bitbang) Write(data []byte) (int, error) {
+func (o *Bitbang) write2(data []byte) (int, error) {
 	if len(data) == 0 {
 		return 0, nil
 	}
 
 	if len(data) == 1 {
 		// One nibble: initialisation command
+		o.wait()
 		b := data[0] | o.a
-		o.buf[0] = b | o.e
-		o.buf[1] = b
-		_, err := o.w.Write(o.buf[:2])
+		o.buf[0] = b
+		o.buf[1] = b | o.e
+		o.buf[2] = b
+		_, err := o.w.Write(o.buf[:3])
 		if err != nil {
 			return 0, err
 		}
+		o.setWait(5 * time.Millisecond)
 		return 1, nil
 	}
 
@@ -154,27 +180,45 @@ func (o *Bitbang) Write(data []byte) (int, error) {
 		panic("data length must be 1 or an even number")
 	}
 
-	l := len(data)
+	dlen := len(data)
 	for len(data) > 0 {
-		n := len(o.buf) / 2
-		if n > len(data) {
-			n = len(data)
+		n := len(data) / 2 * bpc
+		if n > len(o.buf) {
+			n = len(o.buf)
 		}
 		k := 0
-		for i := 0; i < n; i += 2 {
-			b0 := data[i] | o.a
-			b1 := data[i+1] | o.a
-			o.buf[k] = b0 | o.e
-			o.buf[k+1] = b0
-			o.buf[k+2] = b1 | o.e
+		i := 0
+		wait := false
+		for k < n {
+			b0 := data[i]
+			b1 := data[i+1]
+			b := b0<<4 | b1&0x0f
+			b0 |= o.a
+			b1 |= o.a
+			o.buf[k] = b0
+			o.buf[k+1] = b0 | o.e
+			o.buf[k+2] = b0
 			o.buf[k+3] = b1
-			k += 4
+			o.buf[k+4] = b1 | o.e
+			o.buf[k+5] = b1
+			// Next bytes (up to bpc) are always zero
+			i += 2
+			k += bpc
+			if b < 4 {
+				// "Clear display" or "Return home command"
+				wait = true
+				break
+			}
 		}
+		o.wait()
 		k, err := o.w.Write(o.buf[:k])
 		if err != nil {
-			return l - len(data) + k/2, err
+			return dlen - len(data) + k*2/bpc, err
 		}
-		data = data[n:]
+		if wait {
+			o.setWait(16 * time.Millisecond)
+		}
+		data = data[i:]
 	}
-	return l, nil
-}*/
+	return dlen, nil
+}

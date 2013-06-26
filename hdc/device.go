@@ -192,32 +192,26 @@ func (d *Device) Init() error {
 
 // Write writes buf starting from current CG RAM or DD RAM address.
 func (d *Device) Write(data []byte) (int, error) {
-	for _, b := range data {
-		d.WriteByte(b)
-	}
-	return len(data), nil
-
-	n := 0
-	blen := len(d.buf) / 2
-	for len(data) != 0 {
-		l := len(data)
-		if l > blen {
-			l = blen
+	dl := len(data)
+	bl := len(d.buf) / 2
+	for len(data) > 0 {
+		n := bl
+		if n > len(data) {
+			n = len(data)
 		}
 		k := 0
-		for _, b := range data[:l] {
+		for _, b := range data[:n] {
 			d.buf[k] = d.rs | b>>4
 			d.buf[k+1] = d.rs | b&0x0f
 			k += 2
 		}
 		k, err := d.w.Write(d.buf[:k])
-		n += k / 2
 		if err != nil {
-			return n, err
+			return dl - len(data) + k/2, err
 		}
-		data = data[l:]
+		data = data[n:]
 	}
-	return n, nil
+	return dl, nil
 }
 
 // Writes byte at current CG RAM or DD RAM address.

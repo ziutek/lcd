@@ -14,6 +14,7 @@
 package hdc
 
 import (
+	"bufio"
 	"io"
 )
 
@@ -22,10 +23,13 @@ import (
 // D4-D7 and RS bits and writes commands/data using some io.Writer which
 // represents a logical communication channel.
 //
-// All commands are written to the provided io.Writer as two bytes (multiple
-// commands can be written using one Write call) with exception of
-// initialisation commands that are always written as one byte (only one
-// initialisation command is written at a time).
+// All commands are written to the provided io.Writer as two bytes, with
+// exception of initialisation commands that are always written as one byte
+// (only one initialisation command is written at a time).
+//
+// You can use bufio.Writer for buffer output (it is useful if you want to mix
+// fast commands and data). In this case use Flush command to call
+// bufio.Writer.Flush.
 type Device struct {
 	w          io.Writer
 	rows, cols int
@@ -137,6 +141,15 @@ func (d *Device) SetDDRAMAddr(addr int) error {
 	return d.writeCmd(0x80 | byte(addr)&0x7f)
 }
 
+// Flush calls bufio.Writer.Flush if bufio.Writer was used as io.Writer
+func (d *Device) Flush() error {
+	bw, ok := d.w.(*bufio.Writer)
+	if !ok {
+		return nil
+	}
+	return bw.Flush()
+}
+
 var init4bit = []byte{
 	// Set 8 bit mode.
 	//
@@ -164,8 +177,14 @@ var init4bit = []byte{
 // - display cleared.
 func (d *Device) Init() error {
 	var err error
+	if err = d.Flush(); err != nil {
+		return err
+	}
 	for _, b := range init4bit {
 		if err = d.writeNibble(b); err != nil {
+			return err
+		}
+		if err = d.Flush(); err != nil {
 			return err
 		}
 	}

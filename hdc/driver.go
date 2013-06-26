@@ -1,7 +1,5 @@
 package hdc
 
-import ()
-
 // Driver implements lcd.Driver interface
 type Driver struct {
 	dev    *Device
@@ -21,11 +19,11 @@ func (d *Driver) Size() (int, int) {
 	return d.dev.rows, d.dev.cols
 }
 
-// Push replaces current scren content. screen should contain new screen
-// content line by line.
-func (d *Driver) Push(screen []byte) error {
+// Push replaces current screen content. Buf contains new screen content line by
+// line.
+/*func (d *Driver) Push(buf []rune) error {
 	if d.dev.rows != 4 {
-		_, err := d.dev.w.Write(screen)
+		_, err := d.dev.w.Write()
 		return err
 	}
 	w := d.dev.cols
@@ -35,4 +33,4 @@ func (d *Driver) Push(screen []byte) error {
 	copy(d.screen[3*w:], screen[3*w:4*w])
 	_, err := d.dev.w.Write(d.screen)
 	return err
-}
+}*/

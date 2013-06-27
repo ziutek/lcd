@@ -30,8 +30,8 @@ const (
 )
 
 var (
-	x = flag.Int("x", 0, "set row")
-	y = flag.Int("y", 0, "sec column")
+	x = flag.Int("x", 0, "column number")
+	y = flag.Int("y", 0, "row number")
 	c = flag.Bool("c", false, "clear display")
 )
 

@@ -15,6 +15,7 @@ package hdc
 
 import (
 	"bufio"
+	"errors"
 	"io"
 )
 
@@ -52,6 +53,14 @@ func NewDevice(w io.Writer, rows, cols int) *Device {
 		rows: rows, cols: cols,
 		rs: 1 << 6,
 	}
+}
+
+func (d *Device) Rows() int {
+	return d.rows
+}
+
+func (d *Device) Cols() int {
+	return d.cols
 }
 
 // SetMapping allows to change bit used for RS signal.
@@ -174,7 +183,7 @@ var init4bit = []byte{
 // - 5x8 font,
 // - display off, cursor off, blink off,
 // - increment mode,
-// - display cleared.
+// - display and cursor at home position cleared.
 func (d *Device) Init() error {
 	var err error
 	if err = d.Flush(); err != nil {
@@ -206,7 +215,7 @@ func (d *Device) Init() error {
 	if err != nil {
 		return err
 	}
-	return d.ClearDisplay()
+	return d.ReturnHome()
 }
 
 // Write writes buf starting from current CG RAM or DD RAM address.
@@ -239,4 +248,25 @@ func (d *Device) WriteByte(b byte) error {
 	d.buf[1] = d.rs | b&0x0f
 	_, err := d.w.Write(d.buf[:2])
 	return err
+}
+
+func (d *Device) MoveCursor(col, row int) error {
+	if col >= d.cols {
+		return errors.New("bad column number")
+	}
+	if col >= d.cols {
+		return errors.New("bad row number")
+	}
+	var addr int
+	switch row {
+	case 0:
+		addr = col
+	case 1:
+		addr = 0x40 + col
+	case 2:
+		addr = d.cols + col
+	case 3:
+		addr = 0x40 + d.cols + col
+	}
+	return d.SetDDRAMAddr(addr)
 }

@@ -5,13 +5,6 @@ import (
 	"unicode/utf8"
 )
 
-type Window interface {
-	io.WriteCloser
-
-	Width() int
-	Height() int
-}
-
 type TextWindow interface {
 	Window
 
@@ -79,6 +72,8 @@ func (w *textWindow) Write(s []byte) (int, error) {
 		switch r {
 		case '\n':
 			addr = (addr/w.width + 1) * w.width
+		case '\r':
+			addr = (addr / w.width) * w.width
 		default:
 			w.runes[addr] = r
 			addr = (addr + 1) % len(w.runes)

@@ -1,29 +1,17 @@
 package lcd
 
 import (
-	"io"
 	"unicode/utf8"
 )
 
-type TextWindow interface {
-	Window
-
-	Runes() []rune
-	CPos() (x, y int)
-	SetCPos(x, y int)
-	Clear()
-}
-
-type textWindow struct {
-	// Content
+type TextWindow struct {
 	width, height int
 	runes         []rune
-	// Cursor
-	cx, cy int
+	cx, cy        int // cursor
 }
 
 func NewTextWindow(width, height int) TextWindow {
-	w := &textWindow{
+	w := &TextWindow{
 		width:  width,
 		height: height,
 		runes:  make([]rune, width*height),
@@ -32,40 +20,40 @@ func NewTextWindow(width, height int) TextWindow {
 	return w
 }
 
-func (w *textWindow) Width() int {
+func (w *TextWindow) Width() int {
 	return w.width
 }
 
-func (w *textWindow) Height() int {
+func (w *TextWindow) Height() int {
 	return w.height
 }
 
-func (w *textWindow) Close() error {
+func (w *TextWindow) Close() error {
 	w.runes = nil
 	return nil
 }
 
-func (w *textWindow) Runes() []rune {
+func (w *TextWindow) Runes() []rune {
 	return w.runes
 }
 
-func (w *textWindow) CPos() (x, y int) {
+func (w *TextWindow) CPos() (x, y int) {
 	return w.cx, w.cy
 }
 
-func (w *textWindow) SetCPos(x, y int) {
+func (w *TextWindow) SetCPos(x, y int) {
 	w.cx = x
 	w.cy = y
 }
 
-func (w *textWindow) cshift(shift int) {
+func (w *TextWindow) cshift(shift int) {
 	w.cx += shift
 	dy := w.cx / w.width
 	w.cx -= dy * w.width
 	w.cy += dy
 }
 
-func (w *textWindow) Write(s []byte) (int, error) {
+func (w *TextWindow) Write(s []byte) (int, error) {
 	addr := w.cy*w.width + w.cx
 	for len(s) > 0 {
 		r, l := utf8.DecodeRune(s)
@@ -86,7 +74,7 @@ func (w *textWindow) Write(s []byte) (int, error) {
 	return len(s), nil
 }
 
-func (w *textWindow) Clear() {
+func (w *TextWindow) Clear() {
 	for n := range w.runes {
 		w.runes[n] = ' '
 	}

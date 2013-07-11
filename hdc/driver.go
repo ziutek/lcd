@@ -22,9 +22,9 @@ func (d *Driver) Size() (int, int) {
 // Push replaces current screen content.
 // buf should contain new screen content line by line.
 func (d *Driver) Refresh(buf []rune) error {
-if rows == 1 {
-}
-	return err
+	if d.dev.rows == 1 {
+	}
+	return nil
 }
 
 func runesToBytes(bs []byte, rs []rune) {

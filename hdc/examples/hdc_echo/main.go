@@ -45,7 +45,7 @@ func main() {
 	checkErr(d.SetBitmode(0xff, ftdi.ModeBitbang))
 	checkErr(d.SetBaudrate(baudrate / 16))
 
-	lcd := hdc.NewDevice(hdc.NewBitbang(d, waitTicks), 4, 20)
+	lcd := hdc.NewDevice(hdc.NewBitbang(d, waitTicks), 20, 4)
 	checkErr(lcd.Init())
 	checkErr(lcd.SetDisplay(hdc.DisplayOn))
 

@@ -41,7 +41,7 @@ type Device struct {
 // NewDevice creates Device with rows x cols display using w for communication.
 // rows can be 1, 2 or 4, cols can be from 1 to 20 (NewDevice panics if you use
 // other walues).
-func NewDevice(w io.Writer, rows, cols int) *Device {
+func NewDevice(w io.Writer, cols, rows int) *Device {
 	if rows != 1 && rows != 2 && rows != 4 {
 		panic("bad number of rows")
 	}

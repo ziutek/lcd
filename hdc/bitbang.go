@@ -15,6 +15,9 @@ import (
 // - thrid:  with E bit unset, need >= 10 ns
 // Full E cycle need >= 500 ns.
 //
+// Bitbang doesn't control proper nible timing - provided io.Writer is
+// responsible for this.
+//
 // When you call its Write method with buffer that contains multiple commands,
 // Bitbang can work in two modes:
 //
@@ -146,7 +149,6 @@ func (o *Bitbang) Write(data []byte) (int, error) {
 func (o *Bitbang) write(data []byte) (int, error) {
 	buf := o.buf[:6]
 	for n := 0; n < len(data); n += 2 {
-		// Multiple nibbles: regural commands
 		o.wait()
 		b0 := data[n]
 		b1 := data[n+1]
@@ -164,10 +166,10 @@ func (o *Bitbang) write(data []byte) (int, error) {
 			return n, err
 		}
 		if b < 4 {
-			// "Clear display" or "Return home"
+			// "Clear display" or "Return home".
 			o.setWait(16 * time.Millisecond)
 		} else {
-			// Other command
+			// Other command.
 			o.setWait(40 * time.Microsecond)
 		}
 	}
